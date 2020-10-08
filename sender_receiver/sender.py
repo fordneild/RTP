@@ -118,10 +118,11 @@ def changeConnectionStatus(s, receiver_ip, receiver_port, isStart):
     awk = False
     while awk == False:
         #send out modify connection status request
-        random_seq_num = random.randint(-sys.maxint - 1,sys.maxint)
-        pkt_header = PacketHeader(type=send_data_type, seq_num=random_seq_num, length=0)
-        pkt_header.checksum = compute_checksum(pkt_header)
-        s.sendto(str(pkt_header), (receiver_ip, receiver_port))
+        random_seq_num = random.randint(1,4294967295)
+        pkt_header = PacketHeader(type=send_data_type, seq_num=random_seq_num, length=1)
+        pkt_header.checksum = compute_checksum(pkt_header / "i")
+        pkt = pkt_header / "i"
+        s.sendto(str(pkt), (receiver_ip, receiver_port))
         #recieve awk 
         awk_pkt, address = s.recvfrom(2048)
         awk_ph = PacketHeader(awk_pkt[:16])

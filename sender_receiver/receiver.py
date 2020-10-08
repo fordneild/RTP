@@ -68,7 +68,7 @@ def receiver(receiver_port, window_size):
                         buf[k - 1] = buf[k]
 
                 cur_seq_num += 1 + i
-                ph = PacketHeader(type=3, seq_num=curq_seq_num, length=1)
+                ph = PacketHeader(type=3, seq_num=cur_seq_num, length=1)
                 ph.checksum = compute_checksum(ph / "i")
                 pkt = ph / "i"
                 s.sendto(str(pkt), (address[0], address[1]))
