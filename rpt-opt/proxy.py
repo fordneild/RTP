@@ -29,7 +29,7 @@ def main():
         isData = True if pkt_header.type == 2 else False
         r = random.randint(1, 100)
         #10% chance to not relay packet, 10% chance to corrupt a random byte
-        if (r < 90  or not isData):
+        if (r < 50  or not isData):
             if r < 10 and not isData:
                 print "corrupting message wtih seqno " + str(pkt_header.seq_num)
                 msg = 'get corrupted'

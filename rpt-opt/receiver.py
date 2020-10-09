@@ -3,7 +3,7 @@
 # Name: Yu-Chung Peng, Hanford Neild
 # JHED ID: ypeng22, hneild1
 ###############################################################################
-
+#THIS IS THE OPT
 import sys
 import socket
 
@@ -69,41 +69,44 @@ def receiver(receiver_port, window_size):
                 f.write(msg)
                 sys.stdout.flush()
                 i = 0
+
                 if len(buf) > 0:
-                    #read from buffer, then shift elements in buffer by the amount that was received but not acked yet
+                #read from buffer, then shift elements in buffer by the amount that was received but not acked yet
                     while (i < len(buf) and buf[i] != None):
                         sys.stdout.write(buf[i])
                         f.write(buf[i])
                         sys.stdout.flush()
                         i += 1
-                    print 'buffer before shift: ' + str(buf) + 'i: ' + str(i)
+
                     for j in range(len(buf)):
                         if(j+i+1<len(buf)):
                             buf[j] = buf[j + i + 1]
-                    # buf[0:i] = buf[i:min(2*i,len(buf))]
-                    print 'buffer after shift: ' + str(buf)
                     for k in range(len(buf) - (i+1), len(buf)):
                         buf[k] = None
-                    print 'buffer after zeros: ' + str(buf)
-                cur_seq_num += 1 + i
+
                 ph = PacketHeader(type=3, seq_num=cur_seq_num, length=1)
                 ph.checksum = compute_checksum(ph / "i")
                 pkt = ph / "i"
                 s.sendto(str(pkt), (address[0], address[1]))
+                cur_seq_num += 1 + i
                 print 'end of loop, cur_seq_num: ' + str(cur_seq_num) + 'buffer: ' + str(buf)
                
             else:
                 print 'recieved data but not in order'
                 print str(cur_seq_num) + " " + str(pkt_header.seq_num)
-
-                if (pkt_header.seq_num < cur_seq_num + window_size and pkt_header.seq_num > cur_seq_num):
+                if (pkt_header.seq_num < cur_seq_num):
+                    ph = PacketHeader(type=3, seq_num=pkt_header.seq_num, length=1)
+                    ph.checksum = compute_checksum(ph / "i")
+                    pkt = ph / "i"
+                    s.sendto(str(pkt), (address[0], address[1]))
+                elif (pkt_header.seq_num < cur_seq_num + window_size and pkt_header.seq_num > cur_seq_num):
                     print 'putting ' + str(pkt_header.seq_num) + ' in buffer slot: ' + str(pkt_header.seq_num - cur_seq_num - 1)
                     buf[pkt_header.seq_num - cur_seq_num - 1] = msg
-                ph = PacketHeader(type=3, seq_num=cur_seq_num, length=1)
-                ph.checksum = compute_checksum(ph / "i")
-                pkt = ph / "i"
-                s.sendto(str(pkt), (address[0], address[1]))
-
+                    print 'sending awk for packet ' + str(pkt_header.seq_num)
+                    ph = PacketHeader(type=3, seq_num=pkt_header.seq_num, length=1)
+                    ph.checksum = compute_checksum(ph / "i")
+                    pkt = ph / "i"
+                    s.sendto(str(pkt), (address[0], address[1]))
 
 def main():
     """Parse command-line argument and call receiver function """
