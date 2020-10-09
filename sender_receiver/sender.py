@@ -16,6 +16,7 @@ def sender(receiver_ip, receiver_port, window_size):
     #initialize variables
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     MAX_DATA_SIZE = 1456 # 1500 (max ethernet) - 8 (UDP) - 20 (IP) - 16 (packet header)
+    MAX_DATA_SIZE = 16 # 1500 (max ethernet) - 8 (UDP) - 20 (IP) - 16 (packet header)
     data_remaining = True
     need_awk = True
     data_window = [None] * window_size
@@ -40,7 +41,7 @@ def sender(receiver_ip, receiver_port, window_size):
     timer_start = time.time()
     #main processing loop
     # while there is data that has not been awked (thus still in data_window)
-    while num_of_window_slots_filled != 0:
+    while num_of_window_slots_filled > 0:
         time_elapsed = time.time() - timer_start
         if time_elapsed > .5:
             print "half second elapsed"
@@ -51,40 +52,46 @@ def sender(receiver_ip, receiver_port, window_size):
             timer_start = time.time()
         else:
             #recieve awk (this part im not sure about, we are potentially calling recvfrom more times than we need to)
-            awk_pkt, address = s.recvfrom(2048)
-            awk_ph = PacketHeader(awk_pkt[:16])
-            expected_checksum = awk_ph.checksum
-            #zero out checksum, so not used to compute next checksum
-            awk_ph.checksum = 0
-            msg = awk_pkt[16:16+awk_ph.length]
-            computed_checksum = compute_checksum(awk_ph / msg)
-            if (awk_ph.type == 3 and expected_checksum == computed_checksum):
-                if(awk_ph.seq_num > highest_awk_recieved):
-                    # we have a new highest awk
-                    highest_awk_recieved = awk_ph.seq_num
-                    #SHIFT PACKETS THAT HAVE BEEN AWKED DOWN
-                    num_to_shift_down = awk_ph.seq_num - seq_num_at_window_start
-                    for i in range(num_of_window_slots_filled - num_to_shift_down): # num_packets - num_to_remove = num_that_need_to_be_shifted
-                        if(i+num_to_shift_down >= len(data_window)):
-                            break
-                        data_window[i] = data_window[i+num_to_shift_down]
-                    #update variables after shifting them down
-                    seq_num_at_window_start = awk_ph.seq_num
-                    num_of_window_slots_filled = num_of_window_slots_filled - num_to_shift_down # lost this many window slots
-                    first_open_slot = num_of_window_slots_filled
-                    #GET NEW PACKETS TO REPLACE AWKED ONES
-                    if data_remaining:
-                        for i in range(num_to_shift_down):
-                            data = sys.stdin.read(MAX_DATA_SIZE)
-                            if(data == ""):
-                                data_remaining = False
-                                break;    
-                            num_of_window_slots_filled = num_of_window_slots_filled + 1 # only increase if there was data
-                            data_window[first_open_slot+i] = data #we should never hit index out of bounds since we dont fill more than we removed
-                    #SEND NEW PACKETS
-                    sendWindow(s, receiver_ip, receiver_port, data_window, first_open_slot, num_of_window_slots_filled, seq_num_at_window_start)
-                    #reset the clock
-                    timer_start = time.time()
+            s.settimeout(0.05)
+            try:
+                awk_pkt, address = s.recvfrom(2048)
+                awk_ph = PacketHeader(awk_pkt[:16])
+                expected_checksum = awk_ph.checksum
+                #zero out checksum, so not used to compute next checksum
+                awk_ph.checksum = 0
+                msg = awk_pkt[16:16+awk_ph.length]
+                computed_checksum = compute_checksum(awk_ph / msg)
+                if (awk_ph.type == 3 and expected_checksum == computed_checksum):
+                    if(awk_ph.seq_num > highest_awk_recieved):
+                        print "recieved new highest awk:"
+                        print awk_ph.seq_num
+                        # we have a new highest awk
+                        highest_awk_recieved = awk_ph.seq_num
+                        #SHIFT PACKETS THAT HAVE BEEN AWKED DOWN
+                        num_to_shift_down = awk_ph.seq_num - seq_num_at_window_start
+                        for i in range(num_of_window_slots_filled - num_to_shift_down): # num_packets - num_to_remove = num_that_need_to_be_shifted
+                            if(i+num_to_shift_down >= len(data_window)):
+                                break
+                            data_window[i] = data_window[i+num_to_shift_down]
+                        #update variables after shifting them down
+                        seq_num_at_window_start = awk_ph.seq_num
+                        num_of_window_slots_filled = num_of_window_slots_filled - num_to_shift_down # lost this many window slots
+                        first_open_slot = num_of_window_slots_filled
+                        #GET NEW PACKETS TO REPLACE AWKED ONES
+                        if data_remaining:
+                            for i in range(num_to_shift_down):
+                                data = sys.stdin.read(MAX_DATA_SIZE)
+                                if(data == ""):
+                                    data_remaining = False
+                                    break;    
+                                num_of_window_slots_filled = num_of_window_slots_filled + 1 # only increase if there was data
+                                data_window[first_open_slot+i] = data #we should never hit index out of bounds since we dont fill more than we removed
+                        #SEND NEW PACKETS
+                        sendWindow(s, receiver_ip, receiver_port, data_window, first_open_slot, num_of_window_slots_filled, seq_num_at_window_start)
+                        #reset the clock
+                        timer_start = time.time()
+            except socket.timeout, socket.error:
+                pass
                 
             
             
@@ -104,8 +111,10 @@ def sender(receiver_ip, receiver_port, window_size):
     
 # inclusive start index, exclusive end index
 def sendWindow(s, receiver_ip, receiver_port, window, startIndex, endIndex, startSeqNum):
+    print "called sendWindow from " + str(startIndex) + " to " + str(endIndex)
     for i in range(startIndex, endIndex):
         data = window[i]
+        print "sending packet: " + data + " with seq_num " + str(startSeqNum+i)
         pkt_header = PacketHeader(type=2, seq_num=startSeqNum+i, length=len(data))
         pkt_header.checksum = compute_checksum(pkt_header / data)
         pkt = pkt_header / data
@@ -118,25 +127,31 @@ def changeConnectionStatus(s, receiver_ip, receiver_port, isStart):
     awk = False
     while awk == False:
         #send out modify connection status request
-        random_seq_num = random.randint(1,4294967295)
+        random_seq_num = random.randint(1, 4294967295)
+        print 'attempting connection with seq num: ' + str(random_seq_num)
         pkt_header = PacketHeader(type=send_data_type, seq_num=random_seq_num, length=1)
         pkt_header.checksum = compute_checksum(pkt_header / "i")
         pkt = pkt_header / "i"
         s.sendto(str(pkt), (receiver_ip, receiver_port))
-        #recieve awk 
-        awk_pkt, address = s.recvfrom(2048)
-        awk_ph = PacketHeader(awk_pkt[:16])
-        expected_checksum = awk_ph.checksum
-        #zero out checksum, so not used to compute checksum
-        awk_ph.checksum = 0
-        msg = awk_pkt[16:16+awk_ph.length]
-        computed_checksum = compute_checksum(awk_ph / msg)
-        if (awk_ph.seq_num == random_seq_num and awk_ph.type == 3 and expected_checksum == computed_checksum):
-            awk = True
-            if(isStart):
-                print "connection started"
-            else: 
-                print "connection ended"
+        #recieve awk
+        s.settimeout(0.05)
+        try:
+            awk_pkt, address = s.recvfrom(2048)
+            awk_ph = PacketHeader(awk_pkt[:16])
+            expected_checksum = awk_ph.checksum
+            #zero out checksum, so not used to compute checksum
+            awk_ph.checksum = 0
+            msg = awk_pkt[16:16+awk_ph.length]
+            computed_checksum = compute_checksum(awk_ph / msg)
+            if (awk_ph.seq_num == random_seq_num and awk_ph.type == 3 and expected_checksum == computed_checksum):
+                awk = True
+                print 'here '
+                if(isStart):
+                    print "connection started"
+                else: 
+                    print "connection ended"
+        except socket.timeout, socket.error:
+            print "timed out"
 
 def main():
     """Parse command-line arguments and call sender function """
