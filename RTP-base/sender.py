@@ -12,11 +12,9 @@ import time
 from util import *
 
 def sender(receiver_ip, receiver_port, window_size):
-    """TODO: Open socket and send message from sys.stdin"""
     #initialize variables
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     MAX_DATA_SIZE = 1456 # 1500 (max ethernet) - 8 (UDP) - 20 (IP) - 16 (packet header)
-    MAX_DATA_SIZE = 16 # 1500 (max ethernet) - 8 (UDP) - 20 (IP) - 16 (packet header)
     data_remaining = True
     need_awk = True
     data_window = [None] * window_size
@@ -44,8 +42,6 @@ def sender(receiver_ip, receiver_port, window_size):
     while num_of_window_slots_filled > 0:
         time_elapsed = time.time() - timer_start
         if time_elapsed > .5:
-            print "half second elapsed"
-            print "resending whole window"
             # resend window
             sendWindow(s, receiver_ip, receiver_port, data_window, 0, num_of_window_slots_filled, seq_num_at_window_start)
             #reset clock
@@ -63,8 +59,6 @@ def sender(receiver_ip, receiver_port, window_size):
                 computed_checksum = compute_checksum(awk_ph / msg)
                 if (awk_ph.type == 3 and expected_checksum == computed_checksum):
                     if(awk_ph.seq_num > highest_awk_recieved):
-                        print "recieved new highest awk:"
-                        print awk_ph.seq_num
                         # we have a new highest awk
                         highest_awk_recieved = awk_ph.seq_num
                         #SHIFT PACKETS THAT HAVE BEEN AWKED DOWN
@@ -92,29 +86,14 @@ def sender(receiver_ip, receiver_port, window_size):
                         timer_start = time.time()
             except socket.timeout, socket.error:
                 pass
-                
-            
-            
-
-        
-    
-            
+                          
     changeConnectionStatus(s, receiver_ip, receiver_port, False)
-    
-    # if we get AWK before 500ms
-        #reset timer
-        #shift everything in window back by x = (window_start_seq_num - awk_seq_num)
-        #repopulate rest of window with x more messages placed in last x slots
-        #send those last x elements
-    # else
-        #resend entire window
+
     
 # inclusive start index, exclusive end index
 def sendWindow(s, receiver_ip, receiver_port, window, startIndex, endIndex, startSeqNum):
-    print "called sendWindow from " + str(startIndex) + " to " + str(endIndex)
     for i in range(startIndex, endIndex):
         data = window[i]
-        print "sending packet: " + data + " with seq_num " + str(startSeqNum+i)
         pkt_header = PacketHeader(type=2, seq_num=startSeqNum+i, length=len(data))
         pkt_header.checksum = compute_checksum(pkt_header / data)
         pkt = pkt_header / data
@@ -128,7 +107,6 @@ def changeConnectionStatus(s, receiver_ip, receiver_port, isStart):
     while awk == False:
         #send out modify connection status request
         random_seq_num = random.randint(1, 4294967295)
-        print 'attempting connection with seq num: ' + str(random_seq_num)
         pkt_header = PacketHeader(type=send_data_type, seq_num=random_seq_num, length=1)
         pkt_header.checksum = compute_checksum(pkt_header / "i")
         pkt = pkt_header / "i"
@@ -145,14 +123,8 @@ def changeConnectionStatus(s, receiver_ip, receiver_port, isStart):
             computed_checksum = compute_checksum(awk_ph / msg)
             if (awk_ph.seq_num == random_seq_num and awk_ph.type == 3 and expected_checksum == computed_checksum):
                 awk = True
-                print 'here '
-                if(isStart):
-                    print "connection started"
-                else: 
-                    print "connection ended"
         except socket.timeout, socket.error:
-            print "timed out"
-
+            pass
 def main():
     """Parse command-line arguments and call sender function """
     if len(sys.argv) != 4:
