@@ -1,12 +1,9 @@
-# Assignment 2: Reliable Transport
-
-### Due: Sunday, October 11
+# Reliable Transport
 
 ## Overview
 
 In this project, you will build a simple reliable transport protocol, RTP, **on top of UDP**. Your RTP implementation must provide in­ order, reliable delivery of UDP datagrams in the presence of events like packet loss, delay, corruption, duplication, and re­ordering.
 
-**This assignment can be done individually or in groups of 2 students.**
 
 There are a variety of ways to ensure a message is reliably delivered from a sender to a receiver. You are to implement a sender (`sender`) and a receiver (`receiver`) that follows the following RTP specification.
 
